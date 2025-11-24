@@ -16,6 +16,7 @@ public class GymDbContext : IdentityDbContext<User, IdentityRole<Guid>, Guid>
     public DbSet<ClassSession> ClassSessions => Set<ClassSession>();
     public DbSet<TrainerProfile> TrainerProfiles => Set<TrainerProfile>();
     
+    public DbSet<Booking> Bookings => Set<Booking>();
     protected override void OnModelCreating(ModelBuilder b)
     {
         base.OnModelCreating(b);
@@ -42,6 +43,18 @@ public class GymDbContext : IdentityDbContext<User, IdentityRole<Guid>, Guid>
             .ValueGeneratedOnAddOrUpdate();
 
 
+        b.Entity<Booking>()
+            .HasOne(b => b.Member)
+            .WithMany()
+            .HasForeignKey(b => b.MemberId)
+            .OnDelete(DeleteBehavior.Cascade);
+        
+        b.Entity<Booking>()
+            .HasOne(b => b.Session)
+            .WithMany()
+            .HasForeignKey(b => b.SessionId)
+            .OnDelete(DeleteBehavior.Cascade);
+            
         // 2) UNIQUE CONSTRAINTS
         b.Entity<TrainerProfile>()
             .HasIndex(t => t.UserId)

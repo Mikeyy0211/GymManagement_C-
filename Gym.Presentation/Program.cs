@@ -1,7 +1,9 @@
 using System.Text;
 using FluentValidation;
 using FluentValidation.AspNetCore;
+using Gym.Application.Attendaces;
 using Gym.Application.Auth;
+using Gym.Application.Bookings;
 using Gym.Application.Classes;
 using Gym.Application.Classes.Validators;
 using Gym.Application.DTOs.Members;
@@ -78,7 +80,10 @@ builder.Services.AddScoped<IClassRepository, ClassRepository>();
 builder.Services.AddScoped<ISessionRepository, SessionRepository>();
 builder.Services.AddScoped<ITrainerRepository, TrainerRepository>();
 builder.Services.AddScoped<TrainerService>();
-
+builder.Services.AddScoped<IBookingRepository, BookingRepository>();
+builder.Services.AddScoped<BookingService>();
+builder.Services.AddScoped<IAttendanceRepository, AttendanceRepository>();
+builder.Services.AddScoped<AttendanceService>();
 // Service
 builder.Services.AddScoped<ClassService>();
 
