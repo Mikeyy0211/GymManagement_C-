@@ -140,7 +140,6 @@ public class MemberService
         if (existing.RowVersion == null || !incoming.SequenceEqual(existing.RowVersion))
             throw new DbUpdateConcurrencyException("The member was modified by someone else.");
 
-        // UPDATE
         existing.FullName = req.FullName.Trim();
         existing.DateOfBirth = req.DateOfBirth!.Value;
         existing.MembershipPlanId = req.MembershipPlanId;
