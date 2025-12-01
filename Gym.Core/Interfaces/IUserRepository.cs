@@ -6,8 +6,9 @@ public interface IUserRepository
 {
     Task<User?> FindByUserNameAsync(string username);
 
-    // NEW — cần cho TrainerService
+    // Required by UoW pattern
     Task<User?> GetByIdAsync(Guid id);
+    Task<User?> GetByIdAsync(Guid id, bool asNoTracking, bool includeDeleted, CancellationToken ct);
 
     Task<bool> CheckPasswordAsync(User user, string password);
     Task<(bool Succeeded, string? Error)> CreateAsync(User user, string password);

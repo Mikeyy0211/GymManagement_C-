@@ -8,15 +8,19 @@ using Gym.Application.Classes;
 using Gym.Application.Classes.Validators;
 using Gym.Application.DTOs.Members;
 using Gym.Application.DTOs.Plans;
-using Gym.Application.Mapping;
+using Gym.Application.DTOs.Reports;
+using Gym.Application.DTOs.Trainers;
 using Gym.Application.Members;
+using Gym.Application.Payments;
 using Gym.Application.Plans;
+using Gym.Application.Reports;
 using Gym.Application.Trainers;
 using Gym.Core.Entities;
 using Gym.Core.Interfaces;
 using Gym.Infrastructure.Auth;
 using Gym.Infrastructure.Persistence;
 using Gym.Infrastructure.Repositories;
+using Gym.Infrastructure.Seed;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -68,30 +72,43 @@ builder.Services
 
     });
 
-//  DI 
+// ========== Repository DI ==========
 builder.Services.AddScoped<IUserRepository, UserRepository>();
-builder.Services.AddScoped<IJwtTokenGenerator, JwtTokenGenerator>();
-builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IPlanRepository, PlanRepository>();
-builder.Services.AddScoped<PlanService>();
 builder.Services.AddScoped<IMemberRepository, MemberRepository>();
-builder.Services.AddScoped<MemberService>();
 builder.Services.AddScoped<IClassRepository, ClassRepository>();
 builder.Services.AddScoped<ISessionRepository, SessionRepository>();
 builder.Services.AddScoped<ITrainerRepository, TrainerRepository>();
-builder.Services.AddScoped<TrainerService>();
 builder.Services.AddScoped<IBookingRepository, BookingRepository>();
-builder.Services.AddScoped<BookingService>();
 builder.Services.AddScoped<IAttendanceRepository, AttendanceRepository>();
-builder.Services.AddScoped<AttendanceService>();
-// Service
+builder.Services.AddScoped<IPaymentRepository, PaymentRepository>();
+builder.Services.AddScoped<IReportRepository, ReportRepository>();
+
+// ========== Unit of Work ==========
+builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
+
+// ========== Services ==========
+builder.Services.AddScoped<IJwtTokenGenerator, JwtTokenGenerator>();
+builder.Services.AddScoped<IAuthService, AuthService>();
+
+builder.Services.AddScoped<PlanService>();
+builder.Services.AddScoped<MemberService>();
 builder.Services.AddScoped<ClassService>();
+builder.Services.AddScoped<TrainerService>();
+builder.Services.AddScoped<BookingService>();
+builder.Services.AddScoped<AttendanceService>();
+builder.Services.AddScoped<PaymentService>();
+builder.Services.AddScoped<IReportService, ReportService>();
 
+// Validators
 builder.Services.AddValidatorsFromAssemblyContaining<CreateClassRequestValidator>();
-
+builder.Services.AddScoped<TrainerService>();
+builder.Services.AddValidatorsFromAssemblyContaining<CreateTrainerRequestValidator>();
 
 //  MVC + FluentValidation 
 builder.Services.AddControllers();
+
+builder.Services.AddMemoryCache();
 
 // v11+ auto-validation
 builder.Services.AddFluentValidationAutoValidation();
@@ -148,6 +165,9 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     await DataSeeder.SeedAsync(scope.ServiceProvider);
+
+    var db = scope.ServiceProvider.GetRequiredService<GymDbContext>();
+    await ReportSeeder.SeedReportDataAsync(db);  // <---- THÊM DÒNG NÀY
 }
 
 //  Pipeline 

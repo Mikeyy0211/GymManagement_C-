@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace Gym.Core.Entities;
 public abstract class BaseEntity
 {
@@ -12,5 +14,6 @@ public abstract class BaseEntity
     public DateTime? DeletedAt { get; set; }
 
     // optimistic concurrency
-    public byte[]? RowVersion { get; set; }
+    [Timestamp]  
+    public byte[]? RowVersion { get; set; } 
 }

@@ -11,37 +11,51 @@ public class AuthService : IAuthService
     private readonly IJwtTokenGenerator _jwt;
     private readonly IMemberRepository _members;
     private readonly ITrainerRepository _trainers;
+    private readonly IUnitOfWork _uow;
 
     public AuthService(
         IUserRepository users,
         IJwtTokenGenerator jwt,
         IMemberRepository members,
-        ITrainerRepository trainers)
+        ITrainerRepository trainers,
+        IUnitOfWork uow)
     {
         _users = users;
         _jwt = jwt;
         _members = members;
         _trainers = trainers;
+        _uow = uow;
     }
 
+    // ======================================================
+    // REGISTER
+    // ======================================================
     public async Task<string> RegisterAsync(RegisterRequest request)
     {
+        // đảm bảo role tồn tại
         await _users.EnsureRoleExistsAsync(request.Role);
 
+        // tạo user
         var user = new User
         {
             Id = Guid.NewGuid(),
-            UserName = request.Username,
-            FullName = request.FullName,
+            UserName = request.Username!,
+            FullName = request.FullName!,
             DateOfBirth = request.DateOfBirth,
-            Email = $"{request.Username}@example.com"
+            Email = $"{request.Username!}@example.com"
         };
 
+        // tạo user trong Identity
         var (ok, error) = await _users.CreateAsync(user, request.Password);
         if (!ok)
             throw new InvalidOperationException(error ?? "Failed to create user");
 
+        // gán role
         await _users.AddToRoleAsync(user, request.Role);
+
+        // ======================================================
+        // Tạo thêm thực thể Member / Trainer
+        // ======================================================
 
         if (request.Role == "Member")
         {
@@ -53,7 +67,6 @@ public class AuthService : IAuthService
 
             await _members.AddAsync(m, CancellationToken.None);
         }
-
         else if (request.Role == "Trainer")
         {
             var t = new TrainerProfile
@@ -70,17 +83,20 @@ public class AuthService : IAuthService
         return "Register successfully";
     }
 
+    // ======================================================
+    // LOGIN
+    // ======================================================
     public async Task<AuthResponse> LoginAsync(LoginRequest request)
     {
-        var user = await _users.FindByUserNameAsync(request.Username);
-        if (user == null)
-            throw new UnauthorizedAccessException("Invalid username or password");
+        var user = await _users.FindByUserNameAsync(request.Username!)
+                   ?? throw new UnauthorizedAccessException("Invalid username or password");
 
         var valid = await _users.CheckPasswordAsync(user, request.Password);
         if (!valid)
             throw new UnauthorizedAccessException("Invalid username or password");
 
         var roles = await _users.GetRolesAsync(user);
+
         var token = await _jwt.GenerateAsync(user, roles);
 
         return new AuthResponse
@@ -88,10 +104,13 @@ public class AuthService : IAuthService
             Token = token,
             Roles = roles,
             Username = user.UserName!,
-            FullName = user.FullName
+            FullName = user.FullName ?? ""
         };
     }
 
+    // ======================================================
+    // ME()
+    // ======================================================
     public async Task<MeResponse> MeAsync(string username)
     {
         var user = await _users.FindByUserNameAsync(username)

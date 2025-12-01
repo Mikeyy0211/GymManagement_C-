@@ -1,71 +1,155 @@
-namespace Gym.Application.Trainers;
-
-using AutoMapper;
+using Gym.Application.DTOs.Common;
 using Gym.Application.DTOs.Trainers;
 using Gym.Core.Entities;
 using Gym.Core.Interfaces;
 using Microsoft.EntityFrameworkCore;
 
+namespace Gym.Application.Trainers;
+
 public class TrainerService
 {
-    private readonly ITrainerRepository _repo;
-    private readonly IUserRepository _users;
-    private readonly IMapper _mapper;
+    private readonly IUnitOfWork _uow;
 
-    public TrainerService(
-        ITrainerRepository repo,
-        IUserRepository users,
-        IMapper mapper)
+    public TrainerService(IUnitOfWork uow)
     {
-        _repo = repo;
-        _users = users;
-        _mapper = mapper;
+        _uow = uow;
     }
 
-    public async Task<IEnumerable<TrainerDto>> GetAllAsync(CancellationToken ct)
+    // =====================================================
+    // 1. PAGED LIST
+    // =====================================================
+    public async Task<PagedResult<TrainerDto>> GetPagedAsync(TrainerQuery q, CancellationToken ct)
     {
-        var list = await _repo.Query()
-            .Include(t => t.User)
+        q.Page = Math.Max(1, q.Page);
+        q.PageSize = Math.Clamp(q.PageSize, 1, 100);
+
+        var query = _uow.Trainers.Query(); // ❗Không Include tại đây
+
+        // SEARCH
+        if (!string.IsNullOrWhiteSpace(q.Search))
+        {
+            var s = q.Search.Trim().ToLower();
+            query = query.Where(t => t.User.FullName.ToLower().Contains(s));
+        }
+
+        // SORTING
+        query = (q.SortBy?.ToLower(), q.SortDir?.ToLower()) switch
+        {
+            ("name", "asc")        => query.OrderBy(t => t.User.FullName),
+            ("name", _)            => query.OrderByDescending(t => t.User.FullName),
+
+            ("experience", "asc")  => query.OrderBy(t => t.ExperienceYears),
+            ("experience", _)      => query.OrderByDescending(t => t.ExperienceYears),
+
+            ("createdat", "asc")   => query.OrderBy(t => t.CreatedAt),
+            _                      => query.OrderByDescending(t => t.CreatedAt)
+        };
+
+        var total = await query.CountAsync(ct);
+
+        var items = await query
+            .Include(t => t.User) // ❗Include AFTER sorting
+            .Skip((q.Page - 1) * q.PageSize)
+            .Take(q.PageSize)
+            .Select(t => new TrainerDto
+            {
+                Id = t.Id,
+                UserId = t.UserId,
+                FullName = t.User.FullName,
+                Specialty = t.Specialty,
+                ExperienceYears = t.ExperienceYears,
+                Phone = t.Phone,
+                CreatedAt = t.CreatedAt
+            })
             .ToListAsync(ct);
 
-        return _mapper.Map<IEnumerable<TrainerDto>>(list);
+        return new PagedResult<TrainerDto>
+        {
+            Page = q.Page,
+            PageSize = q.PageSize,
+            TotalItems = total,
+            Items = items
+        };
     }
 
-    public async Task<TrainerDto> GetByIdAsync(Guid id, CancellationToken ct)
+    // =====================================================
+    // 2. GET BY ID
+    // =====================================================
+    public async Task<TrainerDto> GetByIdAsync(Guid id, bool includeDeleted, CancellationToken ct)
     {
-        var trainer = await _repo.GetByIdAsync(id, true, false, ct)
-                      ?? throw new KeyNotFoundException("Trainer not found");
+        var trainer = await _uow.Trainers.Query(includeDeleted)
+            .Include(t => t.User)
+            .FirstOrDefaultAsync(t => t.Id == id, ct)
+            ?? throw new KeyNotFoundException("Trainer not found");
 
-        return _mapper.Map<TrainerDto>(trainer);
+        return new TrainerDto
+        {
+            Id = trainer.Id,
+            UserId = trainer.UserId,
+            FullName = trainer.User.FullName,
+            Specialty = trainer.Specialty,
+            ExperienceYears = trainer.ExperienceYears,
+            Phone = trainer.Phone,
+            CreatedAt = trainer.CreatedAt
+        };
     }
 
+    // =====================================================
+    // 3. CREATE TRAINER
+    // =====================================================
     public async Task<TrainerDto> CreateAsync(CreateTrainerRequest req, CancellationToken ct)
     {
-        var user = await _users.GetByIdAsync(req.UserId)
-                   ?? throw new KeyNotFoundException("User not found");
+        // Ensure user exists
+        var user = await _uow.Users.GetByIdAsync(req.UserId, false, false, ct)
+                ?? throw new KeyNotFoundException("User not found");
 
-        var trainer = _mapper.Map<TrainerProfile>(req);
+        var trainer = new TrainerProfile
+        {
+            Id = Guid.NewGuid(),
+            UserId = req.UserId,
+            Specialty = req.Specialty,
+            ExperienceYears = req.ExperienceYears,
+            Phone = req.Phone
+        };
 
-        await _repo.AddAsync(trainer, ct);
+        await _uow.Trainers.AddAsync(trainer, ct);
+        await _uow.SaveChangesAsync(ct);
 
-        return _mapper.Map<TrainerDto>(trainer);
+        return new TrainerDto
+        {
+            Id = trainer.Id,
+            UserId = trainer.UserId,
+            FullName = user.FullName,
+            Specialty = trainer.Specialty,
+            ExperienceYears = trainer.ExperienceYears,
+            Phone = trainer.Phone,
+            CreatedAt = trainer.CreatedAt
+        };
     }
 
+    // =====================================================
+    // 4. UPDATE TRAINER
+    // =====================================================
     public async Task UpdateAsync(Guid id, UpdateTrainerRequest req, CancellationToken ct)
     {
-        var trainer = await _repo.GetByIdAsync(id, false, false, ct)
+        var trainer = await _uow.Trainers.GetByIdAsync(id, false, false, ct)
                       ?? throw new KeyNotFoundException("Trainer not found");
 
-        _mapper.Map(req, trainer);
+        trainer.Specialty = req.Specialty;
+        trainer.ExperienceYears = req.ExperienceYears;
+        trainer.Phone = req.Phone;
 
-        await _repo.UpdateAsync(trainer, ct);
+        await _uow.Trainers.UpdateAsync(trainer, ct);
     }
 
+    // =====================================================
+    // 5. SOFT DELETE
+    // =====================================================
     public async Task SoftDeleteAsync(Guid id, CancellationToken ct)
     {
-        var trainer = await _repo.GetByIdAsync(id, false, false, ct)
+        var trainer = await _uow.Trainers.GetByIdAsync(id, false, true, ct)
                       ?? throw new KeyNotFoundException("Trainer not found");
 
-        await _repo.SoftDeleteAsync(trainer, ct);
+        await _uow.Trainers.SoftDeleteAsync(trainer, ct);
     }
 }

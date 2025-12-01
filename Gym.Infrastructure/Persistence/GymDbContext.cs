@@ -16,13 +16,16 @@ public class GymDbContext : IdentityDbContext<User, IdentityRole<Guid>, Guid>
     public DbSet<ClassSession> ClassSessions => Set<ClassSession>();
     public DbSet<TrainerProfile> TrainerProfiles => Set<TrainerProfile>();
     
+    public DbSet<Attendance> Attendances => Set<Attendance>();
+    public DbSet<Payment> Payments => Set<Payment>();
     public DbSet<Booking> Bookings => Set<Booking>();
+
     protected override void OnModelCreating(ModelBuilder b)
     {
         base.OnModelCreating(b);
         //row version
         b.Entity<Member>()
-            .Property(e => e.RowVersion)
+            .Property(e => ((BaseEntity)e).RowVersion)
             .IsRowVersion()
             .ValueGeneratedOnAddOrUpdate();
         b.Entity<MembershipPlan>()
@@ -42,7 +45,8 @@ public class GymDbContext : IdentityDbContext<User, IdentityRole<Guid>, Guid>
             .IsRowVersion()
             .ValueGeneratedOnAddOrUpdate();
 
-
+        
+        
         b.Entity<Booking>()
             .HasOne(b => b.Member)
             .WithMany()
@@ -55,6 +59,10 @@ public class GymDbContext : IdentityDbContext<User, IdentityRole<Guid>, Guid>
             .HasForeignKey(b => b.SessionId)
             .OnDelete(DeleteBehavior.Cascade);
             
+        b.Entity<Payment>()
+            .Property(p => p.Status)
+            .HasConversion<string>();
+        
         // 2) UNIQUE CONSTRAINTS
         b.Entity<TrainerProfile>()
             .HasIndex(t => t.UserId)

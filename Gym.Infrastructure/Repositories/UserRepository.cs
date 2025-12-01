@@ -23,6 +23,12 @@ public class UserRepository : IUserRepository
     public Task<User?> GetByIdAsync(Guid id)
         => _userManager.FindByIdAsync(id.ToString());
 
+    public Task<User?> GetByIdAsync(Guid id, bool asNoTracking, bool includeDeleted, CancellationToken ct)
+    {
+        // Identity UserManager không có soft delete hoặc tracking
+        return _userManager.FindByIdAsync(id.ToString());
+    }
+
     public Task<bool> CheckPasswordAsync(User user, string password)
         => _userManager.CheckPasswordAsync(user, password);
 

@@ -8,27 +8,32 @@ namespace Gym.Infrastructure.Repositories;
 public class BaseRepository<T> : IBaseRepository<T> where T : BaseEntity
 {
     protected readonly GymDbContext _db;
+    protected readonly DbSet<T> _set;
 
     public BaseRepository(GymDbContext db)
     {
         _db = db;
+        _set = db.Set<T>();
     }
 
+    // -----------------------------
+    // Query
+    // -----------------------------
     public virtual IQueryable<T> Query(bool includeDeleted = false)
+        => includeDeleted
+            ? _set.AsQueryable()
+            : _set.Where(e => !e.IsDeleted);
+
+    // -----------------------------
+    // Get by ID
+    // -----------------------------
+    public async Task<T?> GetByIdAsync(
+        Guid id,
+        bool asNoTracking = false,
+        bool includeDeleted = false,
+        CancellationToken ct = default)
     {
-        var q = _db.Set<T>().AsQueryable();
-        if (!includeDeleted)
-            q = q.Where(x => !x.IsDeleted);
-
-        return q;
-    }
-
-    public virtual async Task<T?> GetByIdAsync(Guid id, bool asNoTracking, bool includeDeleted, CancellationToken ct)
-    {
-        var q = _db.Set<T>().AsQueryable();
-
-        if (!includeDeleted)
-            q = q.Where(x => !x.IsDeleted);
+        var q = Query(includeDeleted);
 
         if (asNoTracking)
             q = q.AsNoTracking();
@@ -36,23 +41,29 @@ public class BaseRepository<T> : IBaseRepository<T> where T : BaseEntity
         return await q.FirstOrDefaultAsync(x => x.Id == id, ct);
     }
 
-    public virtual async Task AddAsync(T entity, CancellationToken ct)
+    // -----------------------------
+    // Add
+    // -----------------------------
+    public Task AddAsync(T entity, CancellationToken ct = default)
+        => _set.AddAsync(entity, ct).AsTask();
+
+    // -----------------------------
+    // Update (with ct)
+    // -----------------------------
+    public Task UpdateAsync(T entity, CancellationToken ct = default)
     {
-        await _db.Set<T>().AddAsync(entity, ct);
-        await _db.SaveChangesAsync(ct);
+        _set.Update(entity);
+        return Task.CompletedTask;
     }
 
-    public virtual async Task UpdateAsync(T entity, CancellationToken ct)
-    {
-        _db.Set<T>().Update(entity);
-        await _db.SaveChangesAsync(ct);
-    }
-
-    public virtual async Task SoftDeleteAsync(T entity, CancellationToken ct)
+    // -----------------------------
+    // Soft Delete (with ct)
+    // -----------------------------
+    public Task SoftDeleteAsync(T entity, CancellationToken ct = default)
     {
         entity.IsDeleted = true;
         entity.DeletedAt = DateTime.UtcNow;
-        _db.Set<T>().Update(entity);
-        await _db.SaveChangesAsync(ct);
+        _set.Update(entity);
+        return Task.CompletedTask;
     }
 }

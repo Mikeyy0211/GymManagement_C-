@@ -1,11 +1,16 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
+using Swashbuckle.AspNetCore.Annotations;
 using Gym.Application.DTOs.Trainers;
 using Gym.Application.Trainers;
-
+using Gym.Application.DTOs.Common;
 
 namespace Gym.Presentation.Controllers;
+
 [ApiController]
-[Route("trainers")]
+[Route("api/[controller]")]
+[Authorize(Roles = "Admin")]
+[SwaggerTag("Trainer management")]
 public class TrainerController : ControllerBase
 {
     private readonly TrainerService _service;
@@ -16,12 +21,18 @@ public class TrainerController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetAll(CancellationToken ct)
-        => Ok(await _service.GetAllAsync(ct));
+    public async Task<IActionResult> GetPaged([FromQuery] TrainerQuery query, CancellationToken ct)
+    {
+        var data = await _service.GetPagedAsync(query, ct);
+        return Ok(data);
+    }
 
     [HttpGet("{id}")]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
-        => Ok(await _service.GetByIdAsync(id, ct));
+    {
+        var dto = await _service.GetByIdAsync(id, includeDeleted: false, ct);
+        return Ok(dto);
+    }
 
     [HttpPost]
     public async Task<IActionResult> Create(CreateTrainerRequest req, CancellationToken ct)

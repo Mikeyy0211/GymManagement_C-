@@ -1,11 +1,16 @@
 using Gym.Application.Bookings;
 using Gym.Application.DTOs.Bookings;
+using Gym.Application.DTOs.Common;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Swashbuckle.AspNetCore.Annotations;
 
 namespace Gym.Presentation.Controllers;
 
 [ApiController]
-[Route("bookings")]
+[Route("api/[controller]")]
+[Authorize]
+[SwaggerTag("Manage class session bookings: create, cancel, and view member bookings")]
 public class BookingController : ControllerBase
 {
     private readonly BookingService _service;
@@ -17,7 +22,10 @@ public class BookingController : ControllerBase
 
     [HttpPost]
     public async Task<IActionResult> Create(CreateBookingRequest req, CancellationToken ct)
-        => Ok(await _service.CreateAsync(req, ct));
+    {
+        var result = await _service.CreateAsync(req, ct);
+        return Ok(ApiResponse<BookingDto>.Ok(result, "Booking created"));
+    }
 
     [HttpDelete("{id}")]
     public async Task<IActionResult> Cancel(Guid id, CancellationToken ct)
@@ -28,5 +36,8 @@ public class BookingController : ControllerBase
 
     [HttpGet("member/{memberId}")]
     public async Task<IActionResult> GetByMember(Guid memberId, CancellationToken ct)
-        => Ok(await _service.GetByMemberAsync(memberId, ct));
+    {
+        var list = await _service.GetByMemberAsync(memberId, ct);
+        return Ok(ApiResponse<IEnumerable<BookingDto>>.Ok(list));
+    }
 }

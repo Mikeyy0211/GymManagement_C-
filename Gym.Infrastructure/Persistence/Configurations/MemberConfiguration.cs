@@ -12,7 +12,7 @@ public sealed class MemberConfiguration : IEntityTypeConfiguration<Member>
         b.HasKey(x => x.Id);
 
         b.Property(x => x.CreatedAt).HasDefaultValueSql("GETUTCDATE()");
-        b.Property(x => x.RowVersion).IsRowVersion();
+        b.Property(x => ((BaseEntity)x).RowVersion).IsRowVersion();
 
         b.Property(x => x.FullName).IsRequired().HasMaxLength(100);
 

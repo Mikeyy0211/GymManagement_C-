@@ -9,4 +9,6 @@ public class MemberDto
     public string? MembershipPlanName { get; set; }
 
     public string RowVersionBase64 { get; set; } = "";
+
+    public DateTime CreatedAt { get; set; }
 }

@@ -17,22 +17,19 @@ public class BookingService
         _members = members;
         _sessions = sessions;
     }
-        public async Task<BookingDto> CreateAsync(CreateBookingRequest req, CancellationToken ct)
+    public async Task<BookingDto> CreateAsync(CreateBookingRequest req, CancellationToken ct)
     {
-        // check member
         var member = await _members.GetByIdAsync(req.MemberId, true, false, ct)
                      ?? throw new KeyNotFoundException("Member not found");
 
-        // check session
         var session = await _sessions.GetByIdAsync(req.SessionId, true, false, ct)
                       ?? throw new KeyNotFoundException("Session not found");
 
-        // check exists
         if (await _repo.ExistsAsync(req.MemberId, req.SessionId, ct))
             throw new InvalidOperationException("Already booked");
 
-        // check capacity
-        int capacity = session.CapacityOverride ?? session.GymClass.Capacity;
+        int baseCapacity = session.GymClass?.Capacity ?? 0;
+        int capacity = session.CapacityOverride ?? baseCapacity;
 
         int count = await _repo.Query()
             .CountAsync(x => x.SessionId == req.SessionId && x.Status == "Active", ct);
@@ -40,7 +37,6 @@ public class BookingService
         if (count >= capacity)
             throw new InvalidOperationException("Session is full");
 
-        // create new booking
         var booking = new Booking
         {
             MemberId = req.MemberId,
