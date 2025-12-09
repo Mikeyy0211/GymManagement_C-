@@ -1,55 +1,45 @@
 using Gym.Application.Classes;
 using Gym.Application.DTOs.Classes;
-using Gym.Application.DTOs.Common;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Swashbuckle.AspNetCore.Annotations;
 
 namespace Gym.Presentation.Controllers;
 
 [ApiController]
 [Route("api/classes")]
 [Authorize(Roles = "Admin,Trainer")]
-[SwaggerTag("Manage gym classes and sessions")]
-public class ClassesController : ControllerBase
+public class ClassController : ControllerBase
 {
     private readonly ClassService _service;
 
-    public ClassesController(ClassService service)
+    public ClassController(ClassService service)
     {
         _service = service;
     }
 
     [HttpGet]
-    [ProducesResponseType(typeof(ApiResponse<IEnumerable<ClassDto>>), 200)]
-    public async Task<IActionResult> GetAll(CancellationToken ct)
-    {
-        var list = await _service.GetAllAsync(ct);
-        return Ok(ApiResponse<IEnumerable<ClassDto>>.Ok(list));
-    }
+    public async Task<IActionResult> GetPaged([FromQuery] ClassQuery query, CancellationToken ct)
+        => Ok(await _service.GetPagedAsync(query, ct));
+
+    [HttpGet("{id}")]
+    public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
+        => Ok(await _service.GetByIdAsync(id, false, ct));
 
     [HttpPost]
-    [ProducesResponseType(typeof(ApiResponse<ClassDto>), 200)]
-    public async Task<IActionResult> Create(CreateClassRequest rq, CancellationToken ct)
+    public async Task<IActionResult> Create(CreateClassRequest req, CancellationToken ct)
+        => Ok(await _service.CreateAsync(req, ct));
+
+    [HttpPut("{id}")]
+    public async Task<IActionResult> Update(Guid id, UpdateClassRequest req, CancellationToken ct)
     {
-        var dto = await _service.CreateClassAsync(rq, ct);
-        return Ok(ApiResponse<ClassDto>.Ok(dto, "Class created"));
+        await _service.UpdateAsync(id, req, ct);
+        return NoContent();
     }
 
-    [HttpGet("{classId:guid}/sessions")]
-    [ProducesResponseType(typeof(ApiResponse<IEnumerable<SessionDto>>), 200)]
-    public async Task<IActionResult> GetSessions(Guid classId, CancellationToken ct)
+    [HttpDelete("{id}")]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
     {
-        var data = await _service.GetSessionsAsync(classId, ct);
-        return Ok(ApiResponse<IEnumerable<SessionDto>>.Ok(data));
-    }
-
-    [HttpPost("{classId:guid}/sessions")]
-    [ProducesResponseType(typeof(ApiResponse<SessionDto>), 200)]
-    public async Task<IActionResult> CreateSession(Guid classId, CreateSessionRequest rq, CancellationToken ct)
-    {
-        rq.ClassId = classId;
-        var dto = await _service.CreateSessionAsync(rq, ct);
-        return Ok(ApiResponse<SessionDto>.Ok(dto, "Session created"));
+        await _service.SoftDeleteAsync(id, ct);
+        return NoContent();
     }
 }

@@ -1,0 +1,28 @@
+@page "/admin/jobs"
+@model Gym.Presentation.Pages.Admin.Jobs.IndexModel
+
+<h2>Subscription Job Dashboard</h2>
+
+<hr />
+
+<h3>Job Status</h3>
+<p><strong>Locked:</strong> @Model.IsLocked</p>
+@if (Model.IsLocked)
+{
+    <p><strong>Locked At:</strong> @Model.LockTime</p>
+}
+
+<h3>Last Execution</h3>
+@if (Model.LastRun != null)
+{
+    <p><strong>Success:</strong> @Model.LastRun.Success</p>
+    <p><strong>Message:</strong> @Model.LastRun.Message</p>
+    <p><strong>Executed At:</strong> @Model.LastRun.ExecutedAt</p>
+}
+else
+{
+    <p>No job history yet.</p>
+}
+
+<a href="/admin/jobs/history">View Full History</a><br />
+<a href="/admin/jobs/run">Run Job Now</a>

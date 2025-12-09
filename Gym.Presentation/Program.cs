@@ -9,33 +9,61 @@ using Gym.Application.Classes.Validators;
 using Gym.Application.DTOs.Members;
 using Gym.Application.DTOs.Plans;
 using Gym.Application.DTOs.Reports;
+using Gym.Application.DTOs.Sessions;
 using Gym.Application.DTOs.Trainers;
 using Gym.Application.Members;
 using Gym.Application.Payments;
 using Gym.Application.Plans;
 using Gym.Application.Reports;
+using Gym.Application.Services;
 using Gym.Application.Trainers;
 using Gym.Core.Entities;
 using Gym.Core.Interfaces;
 using Gym.Infrastructure.Auth;
+using Gym.Infrastructure.Email;
 using Gym.Infrastructure.Persistence;
 using Gym.Infrastructure.Repositories;
 using Gym.Infrastructure.Seed;
+using Gym.Presentation.BackgroundJobs;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using Serilog;
+using Serilog.Core;
+
+// =============================
+// 1) Load Serilog BEFORE builder
+// =============================
+Log.Logger = new LoggerConfiguration()
+    .ReadFrom.Configuration(new ConfigurationBuilder()
+        .AddJsonFile("appsettings.json")
+        .AddJsonFile("serilog.json", optional: true)
+        .Build()
+    )
+    .Enrich.FromLogContext()
+    .CreateLogger();
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Replace default logging
+builder.Host.UseSerilog();
+
+// =============================
+// 2) AutoMapper
+// =============================
 builder.Services.AddAutoMapper(AppDomain.CurrentDomain.GetAssemblies());
 
-//  DbContext 
+// =============================
+// 3) DbContext
+// =============================
 builder.Services.AddDbContext<GymDbContext>(opt =>
     opt.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-//  IdentityCore (API) 
+// =============================
+// 4) Identity
+// =============================
 builder.Services
     .AddIdentityCore<User>(opt =>
     {
@@ -50,13 +78,14 @@ builder.Services
     .AddEntityFrameworkStores<GymDbContext>()
     .AddDefaultTokenProviders();
 
-//  JWT default 
+// =============================
+// 5) JWT
+// =============================
 builder.Services
     .AddAuthentication(options =>
     {
         options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-        options.DefaultChallengeScheme    = JwtBearerDefaults.AuthenticationScheme;
-        options.DefaultScheme             = JwtBearerDefaults.AuthenticationScheme;
+        options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
     })
     .AddJwtBearer(o =>
     {
@@ -67,12 +96,14 @@ builder.Services
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
             IssuerSigningKey = new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!))
+                Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!)
+            )
         };
-
     });
 
-// ========== Repository DI ==========
+// =============================
+// 6) Repository DI
+// =============================
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IPlanRepository, PlanRepository>();
 builder.Services.AddScoped<IMemberRepository, MemberRepository>();
@@ -83,11 +114,18 @@ builder.Services.AddScoped<IBookingRepository, BookingRepository>();
 builder.Services.AddScoped<IAttendanceRepository, AttendanceRepository>();
 builder.Services.AddScoped<IPaymentRepository, PaymentRepository>();
 builder.Services.AddScoped<IReportRepository, ReportRepository>();
+builder.Services.AddScoped<ISubscriptionRepository, SubscriptionRepository>();
+builder.Services.AddScoped<IJobLockRepository, JobLockRepository>();
+builder.Services.AddScoped<IJobHistoryRepository, JobHistoryRepository>();
 
-// ========== Unit of Work ==========
+// =============================
+// 7) Unit of Work
+// =============================
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 
-// ========== Services ==========
+// =============================
+// 8) Services
+// =============================
 builder.Services.AddScoped<IJwtTokenGenerator, JwtTokenGenerator>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 
@@ -100,91 +138,110 @@ builder.Services.AddScoped<AttendanceService>();
 builder.Services.AddScoped<PaymentService>();
 builder.Services.AddScoped<IReportService, ReportService>();
 
-// Validators
+builder.Services.AddScoped<ISubscriptionService, SubscriptionService>();
+
+// =============================
+// 9) Email
+// =============================
+builder.Services.Configure<SmtpSettings>(builder.Configuration.GetSection("Smtp"));
+builder.Services.AddScoped<IEmailSender, SmtpEmailSender>();
+
+// =============================
+// 10) Background Job (only once)
+// =============================
+builder.Services.AddHostedService<SubscriptionJob>();
+
+// =============================
+// 11) Validators
+// =============================
 builder.Services.AddValidatorsFromAssemblyContaining<CreateClassRequestValidator>();
-builder.Services.AddScoped<TrainerService>();
+builder.Services.AddValidatorsFromAssemblyContaining<CreateClassSessionRequestValidator>();
 builder.Services.AddValidatorsFromAssemblyContaining<CreateTrainerRequestValidator>();
-
-//  MVC + FluentValidation 
-builder.Services.AddControllers();
-
-builder.Services.AddMemoryCache();
-
-// v11+ auto-validation
-builder.Services.AddFluentValidationAutoValidation();
-builder.Services.AddFluentValidationClientsideAdapters();
-
-// scan validators 
 builder.Services.AddValidatorsFromAssemblyContaining<CreatePlanRequestValidator>();
 builder.Services.AddValidatorsFromAssemblyContaining<CreateMemberRequestValidator>();
 
-//  Swagger 
+builder.Services.AddFluentValidationAutoValidation();
+builder.Services.AddFluentValidationClientsideAdapters();
+
+// =============================
+// 12) MVC
+// =============================
+builder.Services.AddControllers();
+builder.Services.AddMemoryCache();
+
+// =============================
+// 13) Razor Pages
+// =============================
+builder.Services.AddRazorPages();
+
+
+// =============================
+// 14) Swagger
+// =============================
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
     c.EnableAnnotations();
-
     c.SwaggerDoc("v1", new OpenApiInfo
     {
-        Title       = "Gym API",
-        Version     = "v1",
+        Title = "Gym API",
+        Version = "v1",
         Description = "Gym Management API — JWT, ETag concurrency, soft delete, paging"
     });
 
-    // HTTP Bearer (JWT)
-    var securityScheme = new OpenApiSecurityScheme
+    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
-        Name        = "Authorization",
-        Type        = SecuritySchemeType.Http,
-        Scheme      = "bearer",
-        BearerFormat= "JWT",
-        In          = ParameterLocation.Header,
-        Description = "Paste access token here (no 'Bearer' prefix)."
-    };
+        Name = "Authorization",
+        Type = SecuritySchemeType.Http,
+        Scheme = "bearer",
+        In = ParameterLocation.Header,
+        Description = "Paste JWT token here"
+    });
 
-    c.AddSecurityDefinition("Bearer", securityScheme);
     c.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
         {
             new OpenApiSecurityScheme
             {
-                Reference = new OpenApiReference
-                {
-                    Type = ReferenceType.SecurityScheme,
-                    Id   = "Bearer"
-                }
+                Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" }
             },
             Array.Empty<string>()
         }
     });
 });
 
+// =============================
+// 14) Build app
+// =============================
 var app = builder.Build();
 
-//  SEED roles + admin
+// =============================
+// 15) Seed data
+// =============================
 using (var scope = app.Services.CreateScope())
 {
-    await DataSeeder.SeedAsync(scope.ServiceProvider);
+    var sp = scope.ServiceProvider;
+    var db = sp.GetRequiredService<GymDbContext>();
 
-    var db = scope.ServiceProvider.GetRequiredService<GymDbContext>();
-    await ReportSeeder.SeedReportDataAsync(db);  // <---- THÊM DÒNG NÀY
+    await DataSeeder.SeedAsync(sp);
+    await ReportSeeder.SeedReportDataAsync(db);
 }
 
-//  Pipeline 
+// =============================
+// 16) Middleware pipeline
+// =============================
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
-    app.UseSwaggerUI(o =>
-    {
-        o.DocumentTitle = "Gym API Docs";
-        o.DisplayOperationId();
-        o.DisplayRequestDuration();
-    });
+    app.UseSwaggerUI();
 }
 
 app.UseAuthentication();
 app.UseAuthorization();
-
-
 app.MapControllers();
+app.MapRazorPages();
+
+// =============================
+// 17) Run App
+// =============================
 app.Run();

@@ -1,0 +1,26 @@
+@page "/admin/jobs/history"
+@model Gym.Presentation.Pages.Admin.Jobs.HistoryModel
+<h2>Subscription Job History</h2>
+
+<table border="1" cellpadding="8">
+    <thead>
+    <tr>
+        <th>Time</th>
+        <th>Success</th>
+        <th>Message</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    @foreach (var h in Model.Items)
+    {
+        <tr>
+            <td>@h.ExecutedAt</td>
+            <td>@h.Success</td>
+            <td>@h.Message</td>
+        </tr>
+    }
+    </tbody>
+</table>
+
+<a href="/admin/jobs">Back</a>
